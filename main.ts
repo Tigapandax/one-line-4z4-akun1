@@ -1,32 +1,33 @@
-import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
+// One Line, One Laugh — entry program (program/v1, node22 stdlib).
+// Reads the joke from one-line.txt, validates it against the bounty caps,
+// and writes it to /output/entry.txt for the sealed gate scorer.
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const MAX_CHARS = 140;
+// Bounty cap for this competition: 1 to 140 characters (see competition.yaml).
+const CAP = 140;
 
-const raw = readFileSync(new URL("./one-line.txt", import.meta.url), "utf8");
-const line = raw.replace(/\n$/, "");
-
-const failures: string[] = [];
-if (line.length === 0) failures.push("empty line");
-if ([...line].length > MAX_CHARS) failures.push(`too long: ${[...line].length}/${MAX_CHARS} characters`);
-if (line !== line.trim()) failures.push("leading or trailing whitespace");
-if (line.includes("\r")) failures.push("carriage return found");
-if (line.includes("\n")) failures.push("more than one line");
-if (/\s{2,}/.test(line)) failures.push("double space inside the line");
-if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(line)) failures.push("control character inside the line");
-const quotes = (line.match(/"/g) || []).length;
-if (quotes % 2 !== 0) failures.push("unbalanced double quotes");
-if (!/\s/.test(line)) failures.push("a joke needs more than one word");
-if (!/[.!?]["']?$/.test(line)) failures.push("must end with terminal punctuation");
-
-if (failures.length > 0) {
-  for (const f of failures) console.error(`FAIL: ${f}`);
+function fail(reason: string): never {
+  console.error(`FAIL: ${reason}`);
   process.exit(1);
 }
 
-const outputDir = process.env.MAKEFUN_OUTPUT_DIR || "/output";
-mkdirSync(outputDir, { recursive: true });
-writeFileSync(join(outputDir, "entry.txt"), line + "\n");
+const text = readFileSync(new URL("./one-line.txt", import.meta.url), "utf8")
+  .replace(/\r\n?/g, "\n")
+  .replace(/\n$/, "");
+const chars = [...text];
 
-console.log(line);
-console.log(`OK: ${[...line].length}/${MAX_CHARS} characters, single line, clean pun delivered.`);
+if (chars.length === 0) fail("the line is empty");
+if (chars.length > CAP) fail(`line is ${chars.length} characters, cap is ${CAP}`);
+if (text.trim() !== text) fail("leading or trailing whitespace");
+if (text.includes("\n")) fail("more than one line");
+// The gate scorer reads entry.txt as UTF-8 text; control characters would
+// corrupt it, so reject them before writing.
+if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(text)) fail("control character in the line");
+if (!/[.!?]$/.test(text)) fail("line must end with . ! or ?");
+
+const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
+mkdirSync(outDir, { recursive: true });
+writeFileSync(join(outDir, "entry.txt"), `${text}\n`);
+console.log(text);
+console.log(`OK: ${chars.length}/${CAP} chars written to ${join(outDir, "entry.txt")}`);
